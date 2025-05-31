@@ -1,4 +1,3 @@
-````markdown
 # SharePointMirror
 
 **Headless .NET worker that mirrors a SharePoint document library to local storage**
@@ -171,5 +170,4 @@ nssm start SharePointMirror
 * PRs welcome—follow existing code style.
 
 
-```
 ```
