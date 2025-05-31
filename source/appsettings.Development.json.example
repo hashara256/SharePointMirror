@@ -1,0 +1,15 @@
+{
+  "SharePoint": {
+    "SiteUrl": "https://yourtenant.sharepoint.com/sites/devsite",
+    "LibraryRoot": "/Shared Documents",
+    "ClientId": "your-dev-client-id-guid",
+    "TenantId": "your-dev-tenant-id-guid",
+    "AuthMode": "ClientSecret",
+    "ClientSecret": "your-dev-client-secret"
+  },
+  "Tracking": {
+    "FilePrefix": "DEV_",
+    "LocalRootPath": "D:\\DevSharePointMirror",
+    "PollIntervalSeconds": 60
+  }
+}

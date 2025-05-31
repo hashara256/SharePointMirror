@@ -1,0 +1,25 @@
+# Ignore user secrets
+appsettings.json
+appsettings.Development.json
+
+# Build results
+*/bin/
+*/obj/
+
+# User-specific files
+*.user
+*.suo
+
+# VS Code
+.vscode/
+
+# Dotnet environment files
+*.pfx
+*.key
+*.cer
+
+# OS files
+*/.DS_Store
+*/Thumbs.db
+
+local/
