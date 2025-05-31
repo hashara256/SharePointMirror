@@ -83,7 +83,6 @@ Unzip your chosen asset. In the root folder, edit **appsettings.json**:
     "AuthMode":    "Certificate",
     "PfxPath":     "C:/certs/SharePointMirrorAuth.pfx",
     "PfxPassword": "YourPfxPassword",
-    "ClientSecret": "",
     "CertThumbprint": "",
     "CertStoreLocation": "",
     "CertStoreName":  ""
