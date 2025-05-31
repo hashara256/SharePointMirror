@@ -23,19 +23,19 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore dependencies
-        run: dotnet restore SharePointMirror/
+        run: dotnet restore source/
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore SharePointMirror/
+        run: dotnet build --configuration Release --no-restore source/
 
       - name: Test
-        run: dotnet test --configuration Release --no-build --verbosity normal SharePointMirror/
+        run: dotnet test --configuration Release --no-build --verbosity normal source/
 
       - name: Publish Linux self-contained
         id: publish-linux-sc
         run: |
           out=publish/linux-selfcontained
-          dotnet publish SharePointMirror/ -c Release -r linux-x64 --self-contained true -o "$out"
+          dotnet publish source/ -c Release -r linux-x64 --self-contained true -o "$out"
           tar -czf "$out.tar.gz" -C "$(dirname "$out")" "$(basename "$out")"
           echo "artifact-path=$out.tar.gz" >> "$GITHUB_OUTPUT"
 
@@ -43,7 +43,7 @@ jobs:
         id: publish-windows-sc
         run: |
           out=publish/windows-selfcontained
-          dotnet publish SharePointMirror/ -c Release -r win-x64 --self-contained true -o "$out"
+          dotnet publish source/ -c Release -r win-x64 --self-contained true -o "$out"
           zip -r "$out.zip" "$out"
           echo "artifact-path=$out.zip" >> "$GITHUB_OUTPUT"
 
@@ -51,7 +51,7 @@ jobs:
         id: publish-linux-fd
         run: |
           out=publish/linux-net8.0
-          dotnet publish SharePointMirror/ -c Release -r linux-x64 --self-contained false -o "$out"
+          dotnet publish source/ -c Release -r linux-x64 --self-contained false -o "$out"
           tar -czf "$out.tar.gz" -C "$(dirname "$out")" "$(basename "$out")"
           echo "artifact-path=$out.tar.gz" >> "$GITHUB_OUTPUT"
 
@@ -59,7 +59,7 @@ jobs:
         id: publish-windows-fd
         run: |
           out=publish/windows-net8.0
-          dotnet publish SharePointMirror/ -c Release -r win-x64 --self-contained false -o "$out"
+          dotnet publish source/ -c Release -r win-x64 --self-contained false -o "$out"
           zip -r "$out.zip" "$out"
           echo "artifact-path=$out.zip" >> "$GITHUB_OUTPUT"
 
