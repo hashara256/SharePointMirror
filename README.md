@@ -1,3 +1,5 @@
+[![.NET](https://github.com/hashara256/SharePointMirror/actions/workflows/dotnet.yml/badge.svg)](https://github.com/hashara256/SharePointMirror/actions/workflows/dotnet.yml)
+
 # SharePointMirror
 
 **Headless .NET worker that mirrors a SharePoint document library to local storage**
