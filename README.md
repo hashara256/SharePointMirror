@@ -60,7 +60,7 @@ openssl pkcs12 -export \
   -inkey spm.key \
   -in spm.crt \
   -passout pass:YourPfxPassword
-````
+```
 
 * **Upload** `spm.crt` to Azure AD (public).
 * **Copy** `SharePointMirrorAuth.pfx` and note its password.
@@ -172,4 +172,3 @@ nssm start SharePointMirror
 * PRs welcome—follow existing code style.
 
 
-```
