@@ -1,6 +1,7 @@
 # Ignore user secrets
 appsettings.json
 appsettings.Development.json
+*.pfx
 
 # Build results
 */bin/
