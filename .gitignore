@@ -12,6 +12,7 @@ appsettings.Development.json
 
 # VS Code
 .vscode/
+.vs/
 
 # Dotnet environment files
 *.pfx
