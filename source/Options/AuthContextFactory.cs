@@ -92,7 +92,10 @@ namespace SharePointMirror.Services
                 // MSAL will reuse a valid token if available
                 result = _app.AcquireTokenForClient(_scopes).ExecuteAsync().GetAwaiter().GetResult();
 
-                _log.LogInformation("Access token successfully acquired. Expires at: {ExpiresOn}", result.ExpiresOn);
+                var tokenSource = result.AuthenticationResultMetadata?.TokenSource.ToString() ?? "Unknown";
+                _log.LogInformation("Access token {TokenSource}. Expires at: {ExpiresOn}", 
+                    tokenSource == "Cache" ? "reused from cache" : "acquired from Azure AD", 
+                    result.ExpiresOn);
             }
             catch (Exception ex)
             {
