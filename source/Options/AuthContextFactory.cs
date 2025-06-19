@@ -1,8 +1,7 @@
 // Services/AuthContextFactory.cs
 using System;
+using System.Linq;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Identity.Client;
@@ -12,108 +11,111 @@ using SharePointMirror.Options;
 namespace SharePointMirror.Services
 {
     /// <summary>
-    /// Factory that creates a SharePoint ClientContext using either client-secret or certificate-based app-only authentication.
+    /// Factory that creates a SharePoint ClientContext using certificate-based app-only authentication.
     /// </summary>
     public class AuthContextFactory : IAuthContextFactory
     {
         private readonly SharePointOptions _sp;
         private readonly ILogger<AuthContextFactory> _log;
+        private readonly IConfidentialClientApplication _app;
+        private readonly string[] _scopes;
 
         public AuthContextFactory(
             IOptions<SharePointOptions> sp,
             ILogger<AuthContextFactory> log)
         {
-            _sp  = sp.Value;
+            _sp = sp.Value;
             _log = log;
+
+            var authority = new Uri(new Uri(_sp.SiteUrl).GetLeftPart(UriPartial.Authority)).Host;
+            _scopes = new[] { $"https://{authority}/.default" };
+            var thumbprint = _sp.CertThumbprint?.Replace(" ", "").ToUpperInvariant();
+
+            if (string.IsNullOrWhiteSpace(thumbprint))
+            {
+                _log.LogError("Certificate thumbprint is not configured or empty.");
+                throw new InvalidOperationException("Certificate thumbprint must be specified.");
+            }
+
+            X509Certificate2 cert;
+            try
+            {
+                using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+                store.Open(OpenFlags.ReadOnly);
+
+                cert = store.Certificates
+                    .Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false)
+                    .OfType<X509Certificate2>()
+                    .FirstOrDefault();
+
+                if (cert == null)
+                {
+                    _log.LogError("Certificate with thumbprint {Thumbprint} not found in LocalMachine store.", thumbprint);
+                    throw new InvalidOperationException($"Certificate with thumbprint {thumbprint} not found.");
+                }
+
+                if (!cert.HasPrivateKey)
+                {
+                    _log.LogError("Certificate {Thumbprint} does not contain a private key.", thumbprint);
+                    throw new InvalidOperationException($"Certificate {thumbprint} missing private key.");
+                }
+
+                _log.LogInformation("Certificate loaded: {Subject}, Thumbprint={Thumbprint}", cert.Subject, cert.Thumbprint);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Failed to load or validate certificate with thumbprint {Thumbprint}", thumbprint);
+                throw;
+            }
+
+            // Build the confidential client application ONCE
+            _app = ConfidentialClientApplicationBuilder
+                .Create(_sp.ClientId)
+                .WithCertificate(cert)
+                .WithTenantId(_sp.TenantId)
+                .Build();
         }
 
         public ClientContext CreateContext()
         {
-            _log.LogDebug("AuthMode={AuthMode}, ClientId={ClientId}", _sp.AuthMode, _sp.ClientId);
+            _log.LogInformation("Initializing SharePoint authentication context (Mode: {AuthMode})", _sp.AuthMode);
 
-            // Determine authority and scope for MSAL
-            var authority = new Uri(new Uri(_sp.SiteUrl).GetLeftPart(UriPartial.Authority)).Host;
-            string[] scopes = { $"https://{authority}/.default" };
-
-            AuthenticationResult result;
-
-            if (_sp.AuthMode.Equals("Certificate", StringComparison.OrdinalIgnoreCase))
+            if (!_sp.AuthMode.Equals("Certificate", StringComparison.OrdinalIgnoreCase))
             {
-                // Load PFX certificate with private key
-                var cert = new X509Certificate2(_sp.PfxPath, _sp.PfxPassword, X509KeyStorageFlags.MachineKeySet);
-                var app = ConfidentialClientApplicationBuilder
-                    .Create(_sp.ClientId)
-                    .WithCertificate(cert)
-                    .WithTenantId(_sp.TenantId)
-                    .Build();
-                result = app.AcquireTokenForClient(scopes).ExecuteAsync().GetAwaiter().GetResult();
-            }
-            else if (_sp.AuthMode.Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
-            {
-                var app = ConfidentialClientApplicationBuilder
-                    .Create(_sp.ClientId)
-                    .WithClientSecret(_sp.ClientSecret)
-                    .WithTenantId(_sp.TenantId)
-                    .Build();
-                result = app.AcquireTokenForClient(scopes).ExecuteAsync().GetAwaiter().GetResult();
-
-                // Check appidacr claim
-                try
-                {
-                    var parts = result.AccessToken.Split('.');
-                    if (parts.Length > 1)
-                    {
-                        var payload = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1]));
-                        using var doc = JsonDocument.Parse(payload);
-                        if (doc.RootElement.TryGetProperty("appidacr", out var acr) && acr.GetInt32() == 1)
-                        {
-                            throw new InvalidOperationException(
-                                "Client-secret tokens (appidacr=1) are rejected by SharePoint CSOM. " +
-                                "Use certificate-based authentication (appidacr=2) instead.");
-                        }
-                    }
-                }
-                catch (InvalidOperationException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _log.LogWarning(ex, "Unable to validate appidacr claim.");
-                }
-            }
-            else
-            {
+                _log.LogError("Unsupported AuthMode configured: {AuthMode}", _sp.AuthMode);
                 throw new InvalidOperationException($"Unsupported AuthMode '{_sp.AuthMode}'");
             }
 
-            // // Log roles for verification
-            // try
-            // {
-            //     var parts = result.AccessToken.Split('.');
-            //     if (parts.Length > 1)
-            //     {
-            //         var json = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1]));
-            //         using var doc = JsonDocument.Parse(json);
-            //         if (doc.RootElement.TryGetProperty("roles", out var roles))
-            //         {
-            //             _log.LogInformation("Token roles: {Roles}", roles.ToString());
-            //         }
-            //     }
-            // }
-            // catch (Exception ex)
-            // {
-            //     _log.LogWarning(ex, "Failed parsing token roles.");
-            // }
-
-            // Create CSOM context and inject bearer token
-            var ctx = new ClientContext(_sp.SiteUrl);
-            ctx.ExecutingWebRequest += (sender, args) =>
+            AuthenticationResult result;
+            try
             {
-                args.WebRequestExecutor.RequestHeaders["Authorization"] = "Bearer " + result.AccessToken;
-            };
+                // MSAL will reuse a valid token if available
+                result = _app.AcquireTokenForClient(_scopes).ExecuteAsync().GetAwaiter().GetResult();
 
-            return ctx;
+                _log.LogInformation("Access token successfully acquired. Expires at: {ExpiresOn}", result.ExpiresOn);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Token acquisition failed using certificate authentication. Most likely: The user that runs this service has no access to the privatekey. The cert was likely generated via an elevated shell. Solution: Allow access.");
+                throw new InvalidOperationException("Token acquisition failed.", ex);
+            }
+
+            try
+            {
+                var ctx = new ClientContext(_sp.SiteUrl);
+                ctx.ExecutingWebRequest += (sender, args) =>
+                {
+                    args.WebRequestExecutor.RequestHeaders["Authorization"] = "Bearer " + result.AccessToken;
+                };
+
+                _log.LogDebug("ClientContext successfully created for {SiteUrl}", _sp.SiteUrl);
+                return ctx;
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Failed to initialize ClientContext for SharePoint site {SiteUrl}", _sp.SiteUrl);
+                throw;
+            }
         }
     }
 }

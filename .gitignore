@@ -1,8 +1,8 @@
 # Ignore user secrets
 appsettings.json
 appsettings.Development.json
-*.pfx
-
+*/appsettings.json
+*/appsettings.Development.json
 # Build results
 */bin/
 */obj/
@@ -11,9 +11,9 @@ appsettings.Development.json
 *.user
 *.suo
 
-# VS Code
+# VS studio and VS Code
 .vscode/
-.vs/
+.vs
 
 # Dotnet environment files
 *.pfx
@@ -25,3 +25,5 @@ appsettings.Development.json
 */Thumbs.db
 
 local/
+/source/appsettings.json
+/source/appsettings.json

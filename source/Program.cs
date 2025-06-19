@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SharePointMirror.Options;
 using SharePointMirror.Services;
+using System.Runtime.InteropServices;
+
 
 namespace SharePointMirror
 {
@@ -42,7 +44,11 @@ namespace SharePointMirror
                 });
 
             // If deploying as a Windows Service, uncomment:
-            // builder.UseWindowsService();
+            if (!System.Diagnostics.Debugger.IsAttached && !Environment.UserInteractive && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                builder.UseWindowsService();
+            }
+
 
             var host = builder.Build();
             await host.RunAsync();

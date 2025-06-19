@@ -170,6 +170,3 @@ nssm start SharePointMirror
 
 * Open an issue on GitHub for bugs or feature requests.
 * PRs welcome—follow existing code style.
-
-
-```
