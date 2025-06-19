@@ -71,6 +71,7 @@ namespace SharePointMirror.Services
 
         private void ProcessFile(ClientContext ctx, Microsoft.SharePoint.Client.File spFile)
         {
+            bool hashMatches = true;
             try
             {
                 string relative = spFile.ServerRelativeUrl.Replace(ctx.Web.ServerRelativeUrl, string.Empty).TrimStart('/');
@@ -88,20 +89,57 @@ namespace SharePointMirror.Services
 
                 if (_track.VerifyHash)
                 {
-                    var h1 = SHA256.HashData(data);
-                    var h2 = SHA256.HashData(System.IO.File.ReadAllBytes(localPath));
-                    if (h1.SequenceEqual(h2) && _track.DeleteIfMatch)
-                    {
-                        spFile.DeleteObject();
-                        ctx.ExecuteQuery();
-                        _log.LogInformation("Deleted original {FileName}", spFile.Name);
-                    }
+                    hashMatches = VerifyFileHash(data, localPath);
+                    _log.LogInformation("Hash verification for {FileName}: {Result}", spFile.Name, hashMatches ? "MATCH" : "MISMATCH");
+                }
+
+                if (_track.DeleteIfMatch)
+                {
+                    // Move to DoneFolder or ErrorFolder in LibraryRoot
+                    string targetFolder = hashMatches ? _track.DoneFolder : _track.ErrorFolder;
+                    string destUrl = GetTargetUrl(spFile.ServerRelativeUrl, targetFolder);
+
+                    spFile.MoveTo(destUrl, MoveOperations.Overwrite);
+                    ctx.ExecuteQuery();
+                    _log.LogInformation("Moved {FileName} to {TargetFolder}", spFile.Name, targetFolder);
                 }
             }
             catch (Exception ex)
             {
                 _log.LogError(ex, "Error processing {FileName}", spFile.Name);
+
+                // On error, move to ErrorFolder if configured
+                if (_track.DeleteIfMatch && !string.IsNullOrEmpty(_track.ErrorFolder))
+                {
+                    try
+                    {
+                        string destUrl = GetTargetUrl(spFile.ServerRelativeUrl, _track.ErrorFolder);
+                        spFile.MoveTo(destUrl, MoveOperations.Overwrite);
+                        ctx.ExecuteQuery();
+                        _log.LogInformation("Moved errored {FileName} to {ErrorFolder}", spFile.Name, _track.ErrorFolder);
+                    }
+                    catch (Exception moveEx)
+                    {
+                        _log.LogError(moveEx, "Failed to move errored {FileName} to {ErrorFolder}", spFile.Name, _track.ErrorFolder);
+                    }
+                }
             }
+        }
+
+        private string GetTargetUrl(string originalUrl, string targetFolder)
+        {
+            var fileName = Path.GetFileName(originalUrl);
+            var libRoot = _sp.LibraryRoot.TrimEnd('/');
+            var destUrl = $"{libRoot}/{targetFolder}/{fileName}";
+            if (!destUrl.StartsWith("/")) destUrl = "/" + destUrl;
+            return destUrl;
+        }
+
+        private bool VerifyFileHash(byte[] originalData, string localPath)
+        {
+            var h1 = SHA256.HashData(originalData);
+            var h2 = SHA256.HashData(System.IO.File.ReadAllBytes(localPath));
+            return h1.SequenceEqual(h2);
         }
     }
 }

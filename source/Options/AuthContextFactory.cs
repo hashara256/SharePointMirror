@@ -78,7 +78,7 @@ namespace SharePointMirror.Services
 
         public ClientContext CreateContext()
         {
-            _log.LogInformation("Initializing SharePoint authentication context (Mode: {AuthMode})", _sp.AuthMode);
+            _log.LogDebug("Initializing SharePoint authentication context (Mode: {AuthMode})", _sp.AuthMode);
 
             if (!_sp.AuthMode.Equals("Certificate", StringComparison.OrdinalIgnoreCase))
             {
@@ -93,8 +93,8 @@ namespace SharePointMirror.Services
                 result = _app.AcquireTokenForClient(_scopes).ExecuteAsync().GetAwaiter().GetResult();
 
                 var tokenSource = result.AuthenticationResultMetadata?.TokenSource.ToString() ?? "Unknown";
-                _log.LogInformation("Access token {TokenSource}. Expires at: {ExpiresOn}", 
-                    tokenSource == "Cache" ? "reused from cache" : "acquired from Azure AD", 
+                _log.LogDebug("Access token {TokenSource}. Expires at: {ExpiresOn}", 
+                    tokenSource == "Cache" ? "reused from cache" : "acquired from Entra ID", 
                     result.ExpiresOn);
             }
             catch (Exception ex)

@@ -8,4 +8,8 @@ public class TrackingOptions
     public bool DeleteIfMatch { get; set; } = false;
     public List<string>? IgnoreFolders { get; set; }
     public int PollIntervalSeconds { get; set; } = 300;
+
+    // Add these for configurable move targets
+    public string DoneFolder { get; set; } = "_done";
+    public string ErrorFolder { get; set; } = "_error";
 }
