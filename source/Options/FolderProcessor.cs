@@ -57,13 +57,23 @@ namespace SharePointMirror.Services
 
             _log.LogDebug("Folder {Url} contains {FileCount} files and {FolderCount} subfolders", url, folder.Files.Count, folder.Folders.Count);
 
+            // Build ignore list including DoneFolder and ErrorFolder
+            var ignoreFolders = (_track.IgnoreFolders ?? new List<string>()).ToList();
+            if (!string.IsNullOrEmpty(_track.DoneFolder) && !ignoreFolders.Contains(_track.DoneFolder))
+                ignoreFolders.Add(_track.DoneFolder);
+            if (!string.IsNullOrEmpty(_track.ErrorFolder) && !ignoreFolders.Contains(_track.ErrorFolder))
+                ignoreFolders.Add(_track.ErrorFolder);
+
             foreach (var spFile in folder.Files.Where(f => f.Name.StartsWith(_track.FilePrefix, StringComparison.OrdinalIgnoreCase)))
             {
                 _log.LogInformation("Processing file {FileName}", spFile.Name);
                 ProcessFile(ctx, spFile);
             }
 
-            foreach (var sub in folder.Folders.Where(f => _track.IgnoreFolders == null || !_track.IgnoreFolders.Contains(f.Name)))
+            foreach (var sub in folder.Folders.Where(f =>
+                !string.Equals(f.Name, _track.DoneFolder, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(f.Name, _track.ErrorFolder, StringComparison.OrdinalIgnoreCase) &&
+                (_track.IgnoreFolders == null || !_track.IgnoreFolders.Contains(f.Name))))
             {
                 Traverse(ctx, sub.ServerRelativeUrl);
             }
@@ -93,27 +103,45 @@ namespace SharePointMirror.Services
                     _log.LogInformation("Hash verification for {FileName}: {Result}", spFile.Name, hashMatches ? "MATCH" : "MISMATCH");
                 }
 
-                if (_track.DeleteIfMatch)
+                switch (_track.ActionAfterProcessed)
                 {
-                    // Move to DoneFolder or ErrorFolder in LibraryRoot
-                    string targetFolder = hashMatches ? _track.DoneFolder : _track.ErrorFolder;
-                    string destUrl = GetTargetUrl(spFile.ServerRelativeUrl, targetFolder);
+                    case ActionAfterProcessed.Move:
+                        {
+                            string targetFolder = hashMatches ? _track.DoneFolder : _track.ErrorFolder;
+                            string destUrl = GetTargetUrl(spFile.ServerRelativeUrl, targetFolder, ctx.Web.ServerRelativeUrl);
 
-                    spFile.MoveTo(destUrl, MoveOperations.Overwrite);
-                    ctx.ExecuteQuery();
-                    _log.LogInformation("Moved {FileName} to {TargetFolder}", spFile.Name, targetFolder);
+                            var destFolderUrl = destUrl.Substring(0, destUrl.LastIndexOf('/'));
+                            EnsureFolderExists(ctx, destFolderUrl);
+
+                            spFile.MoveTo(destUrl, MoveOperations.Overwrite);
+                            ctx.ExecuteQuery();
+                            _log.LogInformation("Moved {FileName} to {TargetFolder}", spFile.Name, targetFolder);
+                            break;
+                        }
+                    case ActionAfterProcessed.Delete:
+                        {
+                            spFile.DeleteObject();
+                            ctx.ExecuteQuery();
+                            _log.LogInformation("Deleted {FileName} from SharePoint after processing", spFile.Name);
+                            break;
+                        }
+                    case ActionAfterProcessed.None:
+                        {
+                            _log.LogInformation("No action taken for {FileName} after processing", spFile.Name);
+                            break;
+                        }
                 }
             }
             catch (Exception ex)
             {
                 _log.LogError(ex, "Error processing {FileName}", spFile.Name);
 
-                // On error, move to ErrorFolder if configured
-                if (_track.DeleteIfMatch && !string.IsNullOrEmpty(_track.ErrorFolder))
+                // On error, move to ErrorFolder if configured and action is Move
+                if (_track.ActionAfterProcessed == ActionAfterProcessed.Move && !string.IsNullOrEmpty(_track.ErrorFolder))
                 {
                     try
                     {
-                        string destUrl = GetTargetUrl(spFile.ServerRelativeUrl, _track.ErrorFolder);
+                        string destUrl = GetTargetUrl(spFile.ServerRelativeUrl, _track.ErrorFolder, ctx.Web.ServerRelativeUrl);
                         spFile.MoveTo(destUrl, MoveOperations.Overwrite);
                         ctx.ExecuteQuery();
                         _log.LogInformation("Moved errored {FileName} to {ErrorFolder}", spFile.Name, _track.ErrorFolder);
@@ -126,12 +154,29 @@ namespace SharePointMirror.Services
             }
         }
 
-        private string GetTargetUrl(string originalUrl, string targetFolder)
+        private string GetTargetUrl(string originalUrl, string targetFolder, string webServerRelativeUrl)
         {
             var fileName = Path.GetFileName(originalUrl);
+            // Remove the webServerRelativeUrl and library root from the original path to get the subfolder path
             var libRoot = _sp.LibraryRoot.TrimEnd('/');
-            var destUrl = $"{libRoot}/{targetFolder}/{fileName}";
-            if (!destUrl.StartsWith("/")) destUrl = "/" + destUrl;
+            var webRoot = webServerRelativeUrl.TrimEnd('/');
+
+            // Remove the webRoot and libRoot from the originalUrl to get the relative path inside the library
+            var relativePath = originalUrl;
+            if (relativePath.StartsWith(webRoot, StringComparison.OrdinalIgnoreCase))
+                relativePath = relativePath.Substring(webRoot.Length);
+            if (relativePath.StartsWith(libRoot, StringComparison.OrdinalIgnoreCase))
+                relativePath = relativePath.Substring(libRoot.Length);
+
+            relativePath = relativePath.TrimStart('/');
+
+            var parentDir = Path.GetDirectoryName(relativePath.Replace('\\', '/'))?.Replace("\\", "/");
+            // Compose the new folder path: original parent + /_Done or /_Error
+            var targetDir = string.IsNullOrEmpty(parentDir)
+                ? $"{libRoot}/{targetFolder}"
+                : $"{libRoot}/{parentDir}/{targetFolder}";
+
+            var destUrl = $"{webRoot}{(targetDir.StartsWith("/") ? "" : "/")}{targetDir}/{fileName}";
             return destUrl;
         }
 
@@ -140,6 +185,34 @@ namespace SharePointMirror.Services
             var h1 = SHA256.HashData(originalData);
             var h2 = SHA256.HashData(System.IO.File.ReadAllBytes(localPath));
             return h1.SequenceEqual(h2);
+        }
+
+        private void EnsureFolderExists(ClientContext ctx, string folderServerRelativeUrl)
+        {
+            var folder = ctx.Web.GetFolderByServerRelativeUrl(folderServerRelativeUrl);
+            ctx.Load(folder, f => f.Exists);
+            try
+            {
+                ctx.ExecuteQuery();
+                if (!folder.Exists)
+                {
+                    // Create the folder
+                    var parentUrl = folderServerRelativeUrl.Substring(0, folderServerRelativeUrl.LastIndexOf('/'));
+                    var folderName = folderServerRelativeUrl.Substring(folderServerRelativeUrl.LastIndexOf('/') + 1);
+                    var parentFolder = ctx.Web.GetFolderByServerRelativeUrl(parentUrl);
+                    parentFolder.Folders.Add(folderName);
+                    ctx.ExecuteQuery();
+                }
+            }
+            catch (ServerException ex) when (ex.ServerErrorTypeName == "System.IO.FileNotFoundException")
+            {
+                // Folder does not exist, create it
+                var parentUrl = folderServerRelativeUrl.Substring(0, folderServerRelativeUrl.LastIndexOf('/'));
+                var folderName = folderServerRelativeUrl.Substring(folderServerRelativeUrl.LastIndexOf('/') + 1);
+                var parentFolder = ctx.Web.GetFolderByServerRelativeUrl(parentUrl);
+                parentFolder.Folders.Add(folderName);
+                ctx.ExecuteQuery();
+            }
         }
     }
 }
