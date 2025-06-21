@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Worker">
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -16,5 +16,9 @@
     <PackageReference Include="Microsoft.SharePointOnline.CSOM" Version="16.1.26017.12000" />
     <PackageReference Include="PnP.Core.Auth" Version="1.15.0" />
     <PackageReference Include="PnP.Framework" Version="1.18.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="docs\" />
   </ItemGroup>
 </Project>
