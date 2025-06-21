@@ -22,12 +22,12 @@ SharePointMirror is a cross-platform background service that polls a SharePoint 
 
 ## Releases
 
-| Platform       | Deployment Type       | Download (example)                                  |
-| -------------- | --------------------- | --------------------------------------------------- |
-| Windows x64    | Framework-Dependent   | [windows-net8.0.zip](#)                             |
-| Windows x64    | Self-Contained        | [windows-selfcontained.zip](#)                      |
-| Linux x64      | Framework-Dependent   | [linux-net8.0.tar.gz](#)                            |
-| Linux x64      | Self-Contained        | [linux-selfcontained.tar.gz](#)                     |
+| Platform       | Deployment Type       | Download                     |
+| -------------- | --------------------- | ---------------------------- |
+| Windows x64    | Framework-Dependent   | [windows-net8.0.zip]         |
+| Windows x64    | Self-Contained        | [windows-selfcontained.zip]  |
+| Linux x64      | Framework-Dependent   | [linux-net8.0.tar.gz]        |
+| Linux x64      | Self-Contained        | [linux-selfcontained.tar.gz] |
 
 ---
 
