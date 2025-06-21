@@ -86,7 +86,8 @@ namespace SharePointMirror.Services
             }
             else if (_sp.AuthMode.Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
             {
-                // Not shown: client secret logic (leave as is)
+                // ClientSecret not supported. I could not get it to work with SharePoint.
+                _log.LogError("Unsupported AuthMode configured: {AuthMode}", _sp.AuthMode);
             }
             else
             {
