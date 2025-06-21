@@ -170,4 +170,19 @@ SharePointMirror can run as a background service (daemon) on Linux using **syste
 
 - **Logging:**  
   By default, all logs are written to the console (stdout/stderr). When running under systemd, these logs are automatically captured and made available via the system journal.  
-  View logs with:
+  View logs with:`sudo journalctl -u sharepointmirror -f`
+No extra logging configuration is required for this default behavior.
+
+- **Syslog/File Logging:**  
+  If you want to log to syslog or a file in addition to the journal, add a logging provider (e.g., Serilog with a syslog or file sink).
+
+---
+
+## 📖 Logging & Maintenance
+
+* By default logs to console. For file logging, add a provider in `appsettings.json` (e.g. Serilog).
+* On Windows, logs are sent to the Windows Event Viewer when running as a service.
+* On Linux, logs are available via `journalctl` when running as a systemd service.
+* Use `LogLevel.Debug` during troubleshooting; switch back to `Information` in production to reduce disk use.
+
+---
