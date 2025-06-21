@@ -113,6 +113,21 @@ Unzip your chosen asset. In the root folder, edit **appsettings.json**:
 
 ---
 
+## Authentication Configuration
+
+This application supports certificate-based authentication for SharePoint Online using either:
+
+- **Windows Certificate Store** (recommended for production on Windows)
+- **PFX File** (cross-platform, required on Linux)
+
+### Configuration
+
+#### 1. PFX File (Cross-Platform)
+
+Set the following in your `appsettings.json`:
+
+---
+
 ## ▶️ Running
 
 ### Interactive

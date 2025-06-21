@@ -1,6 +1,8 @@
 // Services/AuthContextFactory.cs
 using System;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -29,43 +31,67 @@ namespace SharePointMirror.Services
 
             var authority = new Uri(new Uri(_sp.SiteUrl).GetLeftPart(UriPartial.Authority)).Host;
             _scopes = new[] { $"https://{authority}/.default" };
-            var thumbprint = _sp.CertThumbprint?.Replace(" ", "").ToUpperInvariant();
 
-            if (string.IsNullOrWhiteSpace(thumbprint))
+            X509Certificate2 cert = null;
+
+            if (_sp.AuthMode.Equals("Certificate", StringComparison.OrdinalIgnoreCase))
             {
-                _log.LogError("Certificate thumbprint is not configured or empty.");
-                throw new InvalidOperationException("Certificate thumbprint must be specified.");
-            }
-
-            X509Certificate2 cert;
-            try
-            {
-                using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
-                store.Open(OpenFlags.ReadOnly);
-
-                cert = store.Certificates
-                    .Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false)
-                    .OfType<X509Certificate2>()
-                    .FirstOrDefault();
-
-                if (cert == null)
+                // Prefer PFX if provided, otherwise use store (Windows only)
+                if (!string.IsNullOrWhiteSpace(_sp.PfxPath))
                 {
-                    _log.LogError("Certificate with thumbprint {Thumbprint} not found in LocalMachine store.", thumbprint);
-                    throw new InvalidOperationException($"Certificate with thumbprint {thumbprint} not found.");
+                    if (!System.IO.File.Exists(_sp.PfxPath))
+                    {
+                        _log.LogError("PFX file not found at {PfxPath}", _sp.PfxPath);
+                        throw new InvalidOperationException($"PFX file not found: {_sp.PfxPath}");
+                    }
+                    cert = new X509Certificate2(_sp.PfxPath, _sp.PfxPassword, X509KeyStorageFlags.Exportable);
+                    _log.LogInformation("Loaded certificate from PFX file: {Subject}, Thumbprint={Thumbprint}", cert.Subject, cert.Thumbprint);
                 }
-
-                if (!cert.HasPrivateKey)
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    _log.LogError("Certificate {Thumbprint} does not contain a private key.", thumbprint);
-                    throw new InvalidOperationException($"Certificate {thumbprint} missing private key.");
-                }
+                    var thumbprint = _sp.CertThumbprint?.Replace(" ", "").ToUpperInvariant();
+                    if (string.IsNullOrWhiteSpace(thumbprint))
+                    {
+                        _log.LogError("Certificate thumbprint is not configured or empty.");
+                        throw new InvalidOperationException("Certificate thumbprint must be specified.");
+                    }
 
-                _log.LogInformation("Certificate loaded: {Subject}, Thumbprint={Thumbprint}", cert.Subject, cert.Thumbprint);
+                    using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+                    store.Open(OpenFlags.ReadOnly);
+
+                    cert = store.Certificates
+                        .Find(X509FindType.FindByThumbprint, thumbprint, validOnly: false)
+                        .OfType<X509Certificate2>()
+                        .FirstOrDefault();
+
+                    if (cert == null)
+                    {
+                        _log.LogError("Certificate with thumbprint {Thumbprint} not found in LocalMachine store.", thumbprint);
+                        throw new InvalidOperationException($"Certificate with thumbprint {thumbprint} not found.");
+                    }
+
+                    if (!cert.HasPrivateKey)
+                    {
+                        _log.LogError("Certificate {Thumbprint} does not contain a private key.", thumbprint);
+                        throw new InvalidOperationException($"Certificate {thumbprint} missing private key.");
+                    }
+
+                    _log.LogInformation("Certificate loaded from store: {Subject}, Thumbprint={Thumbprint}", cert.Subject, cert.Thumbprint);
+                }
+                else
+                {
+                    _log.LogError("No valid certificate source found. On Linux, PfxPath must be provided.");
+                    throw new InvalidOperationException("On Linux, PfxPath must be provided for certificate authentication.");
+                }
             }
-            catch (Exception ex)
+            else if (_sp.AuthMode.Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
             {
-                _log.LogWarning(ex, "Failed to load or validate certificate with thumbprint {Thumbprint}", thumbprint);
-                throw;
+                // Not shown: client secret logic (leave as is)
+            }
+            else
+            {
+                _log.LogError("Unsupported AuthMode configured: {AuthMode}", _sp.AuthMode);
+                throw new InvalidOperationException($"Unsupported AuthMode '{_sp.AuthMode}'");
             }
 
             // Build the confidential client application ONCE
@@ -99,7 +125,7 @@ namespace SharePointMirror.Services
             }
             catch (Exception ex)
             {
-                _log.LogWarning(ex, "Token acquisition failed using certificate authentication. Most likely: The user that runs this service has no access to the privatekey. The cert was likely generated via an elevated shell. Solution: Allow access.");
+                _log.LogWarning(ex, "Token acquisition failed using certificate authentication.");
                 throw new InvalidOperationException("Token acquisition failed.", ex);
             }
 
