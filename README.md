@@ -147,6 +147,7 @@ dotnet run
 ---
 
 ## 🖥️ Windows Service
+
 # From an elevated shell:
 sc.exe create SharePointMirror \
   binPath= "\"C:\path\to\SharePointMirror.exe\" --console" \
@@ -157,24 +158,16 @@ Or use **NSSM**:
 nssm install SharePointMirror "C:\path\to\SharePointMirror.exe"
 nssm set SharePointMirror Start SERVICE_AUTO_START
 nssm start SharePointMirror
----
-
-## 📖 Logging & Maintenance
-
-* By default logs to console. For file logging, add a provider in `appsettings.json` (e.g. Serilog).
-* Use `LogLevel.Debug` during troubleshooting; switch back to `Information` in production to reduce disk use.
 
 ---
 
-## 🐞 Troubleshooting
+## 🐧 Linux Service & Logging
 
-* **401 Unauthorized** → confirm `AuthMode` = `"Certificate"`, correct PFX, Azure AD certificate, and Sites.FullControl.All app permission.
-* **ServerRelativeUrl error** → ensure `LibraryRoot` starts with `/` and site URL is correct.
-* **No files processed** → verify `FilePrefix`, library path, and that files exist under that prefix.
+SharePointMirror can run as a background service (daemon) on Linux using **systemd**.
 
----
+- **Service Setup:**  
+  Create a systemd service file (e.g., `/etc/systemd/system/sharepointmirror.service`) that runs your app using `dotnet` or the self-contained binary.
 
-## ❤️ Support & Contributing
-
-* Open an issue on GitHub for bugs or feature requests.
-* PRs welcome—follow existing code style.
+- **Logging:**  
+  By default, all logs are written to the console (stdout/stderr). When running under systemd, these logs are automatically captured and made available via the system journal.  
+  View logs with:
