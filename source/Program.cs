@@ -6,7 +6,6 @@ using SharePointMirror.Options;
 using SharePointMirror.Services;
 using System.Runtime.InteropServices;
 
-
 namespace SharePointMirror
 {
     public class Program
@@ -26,7 +25,7 @@ namespace SharePointMirror
                 })
                 .ConfigureServices((context, services) =>
                 {
-                    // Bind configuration sections
+                    // Bind configuration sections to strongly-typed options
                     services.Configure<SharePointOptions>(
                         context.Configuration.GetSection("SharePoint")
                     );
@@ -34,21 +33,20 @@ namespace SharePointMirror
                         context.Configuration.GetSection("Tracking")
                     );
 
-                    // Register application services
+                    // Register application services and dependencies
                     services.AddSingleton<IAuthContextFactory, AuthContextFactory>();
                     services.AddSingleton<IFolderProcessor, FolderProcessor>();
                     services.AddSingleton<SharePointService>();
 
-                    // Worker that invokes SharePointService on a timer
+                    // Register the background worker service
                     services.AddHostedService<Worker>();
                 });
 
-            // If deploying as a Windows Service, uncomment:
+            // Use Windows Service if running as a service on Windows
             if (!System.Diagnostics.Debugger.IsAttached && !Environment.UserInteractive && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 builder.UseWindowsService();
             }
-
 
             var host = builder.Build();
             await host.RunAsync();

@@ -13,7 +13,7 @@ using SharePointMirror.Options;
 namespace SharePointMirror.Services
 {
     /// <summary>
-    /// Processes SharePoint folders recursively and handles file download, hash verification, and optional deletion.
+    /// Recursively processes SharePoint folders, handling file download, hash verification, and post-processing actions.
     /// </summary>
     public class FolderProcessor : IFolderProcessor
     {
@@ -33,11 +33,11 @@ namespace SharePointMirror.Services
 
         public Task ProcessFolderAsync(ClientContext ctx, CancellationToken token)
         {
-            // Load Web.ServerRelativeUrl
+            // Load the server-relative URL of the SharePoint web
             ctx.Load(ctx.Web, w => w.ServerRelativeUrl);
             ctx.ExecuteQuery();
 
-            // Construct the full root URL
+            // Build the root URL for the library
             string webRelative = ctx.Web.ServerRelativeUrl.TrimEnd('/');
             string libRoot = _sp.LibraryRoot.StartsWith("/") ? _sp.LibraryRoot : "/" + _sp.LibraryRoot;
             string rootUrl = webRelative + libRoot;
@@ -57,7 +57,7 @@ namespace SharePointMirror.Services
 
             _log.LogDebug("Folder {Url} contains {FileCount} files and {FolderCount} subfolders", url, folder.Files.Count, folder.Folders.Count);
 
-            // Build ignore list including DoneFolder and ErrorFolder
+            // Build ignore list for folders
             var ignoreFolders = (_track.IgnoreFolders ?? new List<string>()).ToList();
             if (!string.IsNullOrEmpty(_track.DoneFolder) && !ignoreFolders.Contains(_track.DoneFolder))
                 ignoreFolders.Add(_track.DoneFolder);
@@ -107,6 +107,7 @@ namespace SharePointMirror.Services
                 {
                     case ActionAfterProcessed.Move:
                         {
+                            // Move file to Done or Error folder based on hash result
                             string targetFolder = hashMatches ? _track.DoneFolder : _track.ErrorFolder;
                             string destUrl = GetTargetUrl(spFile.ServerRelativeUrl, targetFolder, ctx.Web.ServerRelativeUrl);
 
@@ -120,6 +121,7 @@ namespace SharePointMirror.Services
                         }
                     case ActionAfterProcessed.Delete:
                         {
+                            // Delete file from SharePoint after processing
                             spFile.DeleteObject();
                             ctx.ExecuteQuery();
                             _log.LogInformation("Deleted {FileName} from SharePoint after processing", spFile.Name);
@@ -136,7 +138,7 @@ namespace SharePointMirror.Services
             {
                 _log.LogError(ex, "Error processing {FileName}", spFile.Name);
 
-                // On error, move to ErrorFolder if configured and action is Move
+                // On error, move file to ErrorFolder if configured and action is Move
                 if (_track.ActionAfterProcessed == ActionAfterProcessed.Move && !string.IsNullOrEmpty(_track.ErrorFolder))
                 {
                     try
@@ -157,11 +159,10 @@ namespace SharePointMirror.Services
         private string GetTargetUrl(string originalUrl, string targetFolder, string webServerRelativeUrl)
         {
             var fileName = Path.GetFileName(originalUrl);
-            // Remove the webServerRelativeUrl and library root from the original path to get the subfolder path
+            // Compute the relative path inside the library
             var libRoot = _sp.LibraryRoot.TrimEnd('/');
             var webRoot = webServerRelativeUrl.TrimEnd('/');
 
-            // Remove the webRoot and libRoot from the originalUrl to get the relative path inside the library
             var relativePath = originalUrl;
             if (relativePath.StartsWith(webRoot, StringComparison.OrdinalIgnoreCase))
                 relativePath = relativePath.Substring(webRoot.Length);
@@ -171,7 +172,7 @@ namespace SharePointMirror.Services
             relativePath = relativePath.TrimStart('/');
 
             var parentDir = Path.GetDirectoryName(relativePath.Replace('\\', '/'))?.Replace("\\", "/");
-            // Compose the new folder path: original parent + /_Done or /_Error
+            // Compose new folder path for Done or Error folder
             var targetDir = string.IsNullOrEmpty(parentDir)
                 ? $"{libRoot}/{targetFolder}"
                 : $"{libRoot}/{parentDir}/{targetFolder}";
@@ -196,7 +197,7 @@ namespace SharePointMirror.Services
                 ctx.ExecuteQuery();
                 if (!folder.Exists)
                 {
-                    // Create the folder
+                    // Create the folder if it does not exist
                     var parentUrl = folderServerRelativeUrl.Substring(0, folderServerRelativeUrl.LastIndexOf('/'));
                     var folderName = folderServerRelativeUrl.Substring(folderServerRelativeUrl.LastIndexOf('/') + 1);
                     var parentFolder = ctx.Web.GetFolderByServerRelativeUrl(parentUrl);
