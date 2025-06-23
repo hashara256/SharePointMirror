@@ -85,6 +85,15 @@ namespace SharePointMirror.Services
             try
             {
                 string relative = spFile.ServerRelativeUrl.Replace(ctx.Web.ServerRelativeUrl, string.Empty).TrimStart('/');
+                
+                // trim relative path. removing the library root from it
+                if (_sp.LibraryRoot.StartsWith("/"))
+                    relative = relative.Substring(_sp.LibraryRoot.Length).TrimStart('/');
+                else
+                    relative = relative.Substring(_sp.LibraryRoot.Length + 1).TrimStart('/');
+
+
+
                 string localPath = Path.Combine(_track.LocalRootPath, relative.Replace('/', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(localPath) ?? throw new InvalidOperationException());
 
