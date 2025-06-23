@@ -35,7 +35,7 @@ jobs:
         id: publish-linux-sc
         run: |
           out=publish/linux-selfcontained
-          dotnet publish source/ -c Release -r linux-x64 --self-contained true -p:PublishSignleFile=true -o "$out"
+          dotnet publish source/ -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o "$out"
           tar -czf "$out.tar.gz" -C "$(dirname "$out")" "$(basename "$out")"
           echo "artifact-path=$out.tar.gz" >> "$GITHUB_OUTPUT"
 
@@ -43,7 +43,7 @@ jobs:
         id: publish-windows-sc
         run: |
           out=publish/windows-selfcontained
-          dotnet publish source/ -c Release -r win-x64 --self-contained true -p:PublishSignleFile=true -o "$out"
+          dotnet publish source/ -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o "$out"
           zip -r "$out.zip" "$out"
           echo "artifact-path=$out.zip" >> "$GITHUB_OUTPUT"
 
@@ -51,7 +51,7 @@ jobs:
         id: publish-linux-fd
         run: |
           out=publish/linux-net8.0
-          dotnet publish source/ -c Release -r linux-x64 --self-contained false -p:PublishSignleFile=true -o "$out"
+          dotnet publish source/ -c Release -r linux-x64 --self-contained false -p:PublishSingleFile=true -o "$out"
           tar -czf "$out.tar.gz" -C "$(dirname "$out")" "$(basename "$out")"
           echo "artifact-path=$out.tar.gz" >> "$GITHUB_OUTPUT"
 
@@ -59,7 +59,7 @@ jobs:
         id: publish-windows-fd
         run: |
           out=publish/windows-net8.0
-          dotnet publish source/ -c Release -r win-x64 --self-contained false -p:PublishSignleFile=true -o "$out"
+          dotnet publish source/ -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o "$out"
           zip -r "$out.zip" "$out"
           echo "artifact-path=$out.zip" >> "$GITHUB_OUTPUT"
 
